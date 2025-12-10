@@ -18,13 +18,30 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 const STUN_SERVER: &str = "stun:stun.l.google.com:19302";
 
-// PeerJS default TURN servers for relay when direct connection fails
-const TURN_SERVERS: &[&str] = &[
-    "turn:eu-0.turn.peerjs.com:3478",
-    "turn:us-0.turn.peerjs.com:3478",
+// TURN server configuration
+struct TurnServer {
+    url: &'static str,
+    username: &'static str,
+    credential: &'static str,
+}
+
+const TURN_SERVERS: &[TurnServer] = &[
+    TurnServer {
+        url: "turn:eu-0.turn.peerjs.com:3478",
+        username: "peerjs",
+        credential: "peerjsp",
+    },
+    TurnServer {
+        url: "turn:us-0.turn.peerjs.com:3478",
+        username: "peerjs",
+        credential: "peerjsp",
+    },
+    TurnServer {
+        url: "turn:openrelay.metered.ca:80",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+    },
 ];
-const TURN_USERNAME: &str = "peerjs";
-const TURN_CREDENTIAL: &str = "peerjsp";
 
 pub struct WebRtcPeer {
     peer_connection: Arc<RTCPeerConnection>,
@@ -34,21 +51,26 @@ pub struct WebRtcPeer {
 
 impl WebRtcPeer {
     pub async fn new() -> Result<Self> {
+        let mut ice_servers = vec![
+            // STUN server for NAT traversal discovery
+            RTCIceServer {
+                urls: vec![STUN_SERVER.to_owned()],
+                ..Default::default()
+            },
+        ];
+
+        // Add TURN servers with individual credentials
+        for turn_server in TURN_SERVERS {
+            ice_servers.push(RTCIceServer {
+                urls: vec![turn_server.url.to_owned()],
+                username: turn_server.username.to_owned(),
+                credential: turn_server.credential.to_owned(),
+                credential_type: RTCIceCredentialType::Password,
+            });
+        }
+
         let config = RTCConfiguration {
-            ice_servers: vec![
-                // STUN server for NAT traversal discovery
-                RTCIceServer {
-                    urls: vec![STUN_SERVER.to_owned()],
-                    ..Default::default()
-                },
-                // TURN servers for relay when direct connection fails
-                RTCIceServer {
-                    urls: TURN_SERVERS.iter().map(|s| s.to_string()).collect(),
-                    username: TURN_USERNAME.to_owned(),
-                    credential: TURN_CREDENTIAL.to_owned(),
-                    credential_type: RTCIceCredentialType::Password,
-                },
-            ],
+            ice_servers,
             ..Default::default()
         };
 
