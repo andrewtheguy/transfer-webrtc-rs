@@ -3,17 +3,45 @@ use serde::{Deserialize, Serialize};
 /// Chunk size for file transfer (16KB)
 pub const CHUNK_SIZE: usize = 16 * 1024;
 
+/// File metadata shared between peers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileInfoData {
+    pub filename: String,
+    pub size: u64,
+    pub chunk_size: u32,
+    pub total_chunks: u64,
+}
+
+impl FileInfoData {
+    pub fn new(filename: &str, size: u64) -> Self {
+        let total_chunks = (size + CHUNK_SIZE as u64 - 1) / CHUNK_SIZE as u64;
+        Self {
+            filename: filename.to_string(),
+            size,
+            chunk_size: CHUNK_SIZE as u32,
+            total_chunks,
+        }
+    }
+}
+
 /// Message types for the file transfer protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum TransferMessage {
-    /// Sender -> Receiver: File metadata
+    /// Sender -> Receiver: File metadata (plaintext - deprecated)
     #[serde(rename = "file_info")]
     FileInfo {
         filename: String,
         size: u64,
         chunk_size: u32,
         total_chunks: u64,
+    },
+
+    /// Sender -> Receiver: File metadata (encrypted)
+    #[serde(rename = "file_info_enc")]
+    EncryptedFileInfo {
+        nonce: Vec<u8>,
+        ciphertext: Vec<u8>,
     },
 
     /// Receiver -> Sender: Ready to receive
@@ -45,6 +73,15 @@ impl TransferMessage {
             size,
             chunk_size: CHUNK_SIZE as u32,
             total_chunks,
+        }
+    }
+
+    pub fn encrypted_file_info(
+        info: crate::transfer::crypto::EncryptedMetadata,
+    ) -> Self {
+        Self::EncryptedFileInfo {
+            nonce: info.nonce.to_vec(),
+            ciphertext: info.ciphertext,
         }
     }
 

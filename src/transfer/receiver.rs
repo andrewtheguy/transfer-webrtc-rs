@@ -1,8 +1,11 @@
 use crate::error::{AppError, Result};
-use crate::transfer::crypto::{decrypt_chunk, KEY_SIZE};
+use crate::transfer::crypto::{
+    decrypt_chunk, decrypt_metadata, EncryptedMetadata, KEY_SIZE, NONCE_SIZE,
+};
 use crate::transfer::protocol::{ParsedMessage, TransferMessage};
 use bytes::Bytes;
 use indicatif::{ProgressBar, ProgressStyle};
+use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::File;
@@ -43,14 +46,27 @@ impl FileReceiver {
                 .await
                 .ok_or(AppError::ChannelClosed)?;
 
-            if let Some(ParsedMessage::Control(TransferMessage::FileInfo {
-                filename,
-                size,
-                total_chunks,
-                ..
-            })) = ParsedMessage::from_bytes(&data)
-            {
-                break (filename, size, total_chunks);
+            match ParsedMessage::from_bytes(&data) {
+                Some(ParsedMessage::Control(
+                    TransferMessage::EncryptedFileInfo { nonce, ciphertext },
+                )) => {
+                    let nonce: [u8; NONCE_SIZE] = nonce
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| AppError::Transfer("Invalid metadata nonce".to_string()))?;
+
+                    let metadata = EncryptedMetadata { nonce, ciphertext };
+                    let file_info = decrypt_metadata(&self.key, &metadata)?;
+
+                    break (file_info.filename, file_info.size, file_info.total_chunks);
+                }
+                Some(ParsedMessage::Control(TransferMessage::FileInfo { .. })) => {
+                    return Err(AppError::Transfer(
+                        "Received unencrypted file metadata; please update the sender"
+                            .to_string(),
+                    ));
+                }
+                _ => {}
             }
         };
 

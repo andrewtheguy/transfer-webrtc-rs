@@ -5,6 +5,7 @@ use aes_gcm::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::RngCore;
+use serde_json;
 
 /// AES-256-GCM key size (32 bytes)
 pub const KEY_SIZE: usize = 32;
@@ -30,6 +31,13 @@ pub fn generate_salt() -> [u8; SALT_SIZE] {
     let mut salt = [0u8; SALT_SIZE];
     rand::thread_rng().fill_bytes(&mut salt);
     salt
+}
+
+/// Generate a random nonce for metadata encryption
+pub fn generate_nonce() -> [u8; NONCE_SIZE] {
+    let mut nonce = [0u8; NONCE_SIZE];
+    rand::thread_rng().fill_bytes(&mut nonce);
+    nonce
 }
 
 /// Create a nonce from chunk index and salt
@@ -101,6 +109,58 @@ pub fn key_from_base64(encoded: &str) -> Result<[u8; KEY_SIZE]> {
     let mut key = [0u8; KEY_SIZE];
     key.copy_from_slice(&bytes);
     Ok(key)
+}
+
+/// Encrypted metadata container
+#[derive(Debug, Clone)]
+pub struct EncryptedMetadata {
+    pub nonce: [u8; NONCE_SIZE],
+    pub ciphertext: Vec<u8>,
+}
+
+/// Encrypt file metadata (filename/size) using AES-256-GCM
+pub fn encrypt_metadata(
+    key: &[u8; KEY_SIZE],
+    info: &crate::transfer::protocol::FileInfoData,
+) -> Result<EncryptedMetadata> {
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| AppError::Encryption(format!("Failed to create cipher: {}", e)))?;
+
+    let nonce_bytes = generate_nonce();
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let plaintext = serde_json::to_vec(info)
+        .map_err(|e| AppError::Encryption(format!("Failed to encode metadata: {}", e)))?;
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext.as_ref())
+        .map_err(|e| AppError::Encryption(format!("Metadata encryption failed: {}", e)))?;
+
+    Ok(EncryptedMetadata {
+        nonce: nonce_bytes,
+        ciphertext,
+    })
+}
+
+/// Decrypt file metadata
+pub fn decrypt_metadata(
+    key: &[u8; KEY_SIZE],
+    encrypted: &EncryptedMetadata,
+) -> Result<crate::transfer::protocol::FileInfoData> {
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| AppError::Encryption(format!("Failed to create cipher: {}", e)))?;
+
+    let nonce = Nonce::from_slice(&encrypted.nonce);
+
+    let plaintext = cipher.decrypt(nonce, encrypted.ciphertext.as_ref()).map_err(|e| {
+        AppError::Encryption(format!("Metadata decryption failed: {}", e))
+    })?;
+
+    let file_info = serde_json::from_slice(&plaintext).map_err(|e| {
+        AppError::Encryption(format!("Failed to decode metadata: {}", e))
+    })?;
+
+    Ok(file_info)
 }
 
 /// Encrypted chunk data
@@ -208,5 +268,20 @@ mod tests {
 
         let result = decrypt_chunk(&key, &encrypted);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_metadata_encrypt_decrypt_roundtrip() {
+        let key = generate_key();
+        let info =
+            crate::transfer::protocol::FileInfoData::new("secret.txt", 1_024);
+
+        let encrypted = encrypt_metadata(&key, &info).unwrap();
+        let decrypted = decrypt_metadata(&key, &encrypted).unwrap();
+
+        assert_eq!(info.filename, decrypted.filename);
+        assert_eq!(info.size, decrypted.size);
+        assert_eq!(info.chunk_size, decrypted.chunk_size);
+        assert_eq!(info.total_chunks, decrypted.total_chunks);
     }
 }

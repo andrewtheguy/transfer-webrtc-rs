@@ -1,6 +1,8 @@
 use crate::error::{AppError, Result};
-use crate::transfer::crypto::{encrypt_chunk, generate_salt, KEY_SIZE, SALT_SIZE};
-use crate::transfer::protocol::{ParsedMessage, TransferMessage, CHUNK_SIZE};
+use crate::transfer::crypto::{
+    encrypt_chunk, encrypt_metadata, generate_salt, KEY_SIZE, SALT_SIZE,
+};
+use crate::transfer::protocol::{FileInfoData, ParsedMessage, TransferMessage, CHUNK_SIZE};
 use bytes::Bytes;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
@@ -58,9 +60,11 @@ impl FileSender {
             filename, file_size, total_chunks
         );
 
-        // Send file info
-        let file_info = TransferMessage::file_info(&filename, file_size);
-        self.send_message(&file_info).await?;
+        // Send encrypted file info (filename + size)
+        let file_info = FileInfoData::new(&filename, file_size);
+        let encrypted_info = encrypt_metadata(&self.key, &file_info)?;
+        let file_info_msg = TransferMessage::encrypted_file_info(encrypted_info);
+        self.send_message(&file_info_msg).await?;
 
         // Wait for ready message
         info!("Waiting for receiver to be ready...");

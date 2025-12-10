@@ -105,8 +105,19 @@ Receive options:
 
 - **AES-256-GCM**: Industry-standard authenticated encryption
 - **Offline key sharing**: Encryption key is never transmitted over the network
+- **Encrypted metadata**: Filenames and sizes are AES-GCM encrypted before sending
 - **Per-chunk integrity**: Each chunk is authenticated, tampering is detected immediately
 - **Unique nonces**: Counter-based nonces prevent replay attacks
+
+## Protocol payloads
+
+- **Control messages** (`0` prefix byte, JSON):
+  - `file_info_enc`: `nonce` (12 bytes) + `ciphertext` (AES-256-GCM of `{"filename","size","chunk_size","total_chunks"}`).
+  - `ready`, `ack { index }`, `done`, `error { message }`.
+- **Encrypted file chunks** (`2` prefix byte, binary):
+  - Layout: `[2][8-byte index][12-byte nonce][ciphertext+tag]` where nonce = `chunk_index || 4-byte salt`.
+  - Payload plaintext is up to 16KB (see `CHUNK_SIZE`), encrypted with the shared key.
+- Filenames and sizes never travel in plaintext; receivers reject unencrypted metadata.
 
 ## Dependencies
 
