@@ -78,6 +78,8 @@ async fn run_sender(file: PathBuf, peer_id: Option<String>, server: &str) -> Res
         match signaling.recv_message().await? {
             ServerMessage::Offer { src, payload, .. } => {
                 info!("Received offer from: {}", src);
+                debug!("SDP type: {}, SDP content length: {}", payload.sdp.sdp_type, payload.sdp.sdp.len());
+                debug!("SDP: {}", payload.sdp.sdp);
                 break (src, payload.sdp, payload.connection_id);
             }
             ServerMessage::Heartbeat => {
@@ -191,9 +193,17 @@ async fn run_receiver(peer_id: String, output: Option<PathBuf>, server: &str) ->
     // Create WebRTC peer
     let mut webrtc_peer = WebRtcPeer::new().await?;
 
+    // Create a data channel first - this is required for the SDP to include data channel info
+    // The sender also creates one, and they'll be negotiated
+    let _local_dc = webrtc_peer.create_data_channel("file-transfer").await?;
+
     // Create and send offer
     let offer = webrtc_peer.create_offer().await?;
     webrtc_peer.set_local_description(offer.clone()).await?;
+
+    debug!("Sending offer SDP length: {}", offer.sdp.len());
+    debug!("Offer SDP: {}", offer.sdp);
+
     signaling
         .send_offer(&peer_id, &offer.sdp, &connection_id)
         .await?;
