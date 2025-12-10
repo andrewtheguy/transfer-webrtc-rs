@@ -17,6 +17,14 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 const STUN_SERVER: &str = "stun:stun.l.google.com:19302";
 
+// PeerJS default TURN servers for relay when direct connection fails
+const TURN_SERVERS: &[&str] = &[
+    "turn:eu-0.turn.peerjs.com:3478",
+    "turn:us-0.turn.peerjs.com:3478",
+];
+const TURN_USERNAME: &str = "peerjs";
+const TURN_CREDENTIAL: &str = "peerjsp";
+
 pub struct WebRtcPeer {
     peer_connection: Arc<RTCPeerConnection>,
     pub ice_candidate_rx: mpsc::Receiver<RTCIceCandidate>,
@@ -26,10 +34,20 @@ pub struct WebRtcPeer {
 impl WebRtcPeer {
     pub async fn new() -> Result<Self> {
         let config = RTCConfiguration {
-            ice_servers: vec![RTCIceServer {
-                urls: vec![STUN_SERVER.to_owned()],
-                ..Default::default()
-            }],
+            ice_servers: vec![
+                // STUN server for NAT traversal discovery
+                RTCIceServer {
+                    urls: vec![STUN_SERVER.to_owned()],
+                    ..Default::default()
+                },
+                // TURN servers for relay when direct connection fails
+                RTCIceServer {
+                    urls: TURN_SERVERS.iter().map(|s| s.to_string()).collect(),
+                    username: TURN_USERNAME.to_owned(),
+                    credential: TURN_CREDENTIAL.to_owned(),
+                    ..Default::default()
+                },
+            ],
             ..Default::default()
         };
 
