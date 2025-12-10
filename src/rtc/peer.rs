@@ -36,6 +36,11 @@ const TURN_SERVERS: &[TurnServer] = &[
         username: "peerjs",
         credential: "peerjsp",
     },
+    TurnServer {
+        url: "turn:turn.anyfirewall.com:443?transport=tcp",
+        username: "webrtc",
+        credential: "webrtc",
+    },
 ];
 
 pub struct WebRtcPeer {
