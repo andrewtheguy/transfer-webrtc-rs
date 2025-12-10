@@ -1,4 +1,4 @@
-# sendfile-webrtc-rs
+# transfer-webrtc-rs
 
 A peer-to-peer file transfer CLI tool using WebRTC data channels. Transfer files directly between computers without uploading to a server.
 
@@ -14,13 +14,13 @@ A peer-to-peer file transfer CLI tool using WebRTC data channels. Transfer files
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/sendfile-webrtc-rs.git
-cd sendfile-webrtc-rs
+git clone https://github.com/peerlink-xyz/transfer-webrtc-rs.git
+cd transfer-webrtc-rs
 
 # Build release binary
 cargo build --release
 
-# Binary will be at ./target/release/sendfile-webrtc-rs
+# Binary will be at ./target/release/transfer-webrtc-rs
 ```
 
 ## Usage
@@ -29,7 +29,7 @@ cargo build --release
 
 ```bash
 # Start sender and get a peer ID
-sendfile-webrtc-rs send myfile.zip
+transfer-webrtc-rs send myfile.zip
 
 # Output:
 # Your peer ID: brave-mountain-river
@@ -40,7 +40,7 @@ sendfile-webrtc-rs send myfile.zip
 
 ```bash
 # Connect using the peer ID from the sender
-sendfile-webrtc-rs receive brave-mountain-river
+transfer-webrtc-rs receive brave-mountain-river
 
 # Output:
 # Connecting to peer brave-mountain-river...
@@ -53,8 +53,8 @@ sendfile-webrtc-rs receive brave-mountain-river
 ### Options
 
 ```
-sendfile-webrtc-rs send <FILE> [OPTIONS]
-sendfile-webrtc-rs receive <PEER_ID> [OPTIONS]
+transfer-webrtc-rs send <FILE> [OPTIONS]
+transfer-webrtc-rs receive <PEER_ID> [OPTIONS]
 
 Options:
   -s, --server <SERVER>  PeerJS server URL [default: wss://0.peerjs.com/peerjs]

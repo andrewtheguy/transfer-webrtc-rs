@@ -1745,28 +1745,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
-name = "sendfile-webrtc-rs"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "bytes",
- "clap",
- "futures-util",
- "indicatif",
- "rand",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "webrtc",
-]
-
-[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2214,6 +2192,28 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "transfer-webrtc-rs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bytes",
+ "clap",
+ "futures-util",
+ "indicatif",
+ "rand",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "webrtc",
 ]
 
 [[package]]

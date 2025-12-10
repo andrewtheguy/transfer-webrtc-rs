@@ -1,5 +1,5 @@
 [package]
-name = "sendfile-webrtc-rs"
+name = "transfer-webrtc-rs"
 version = "0.1.0"
 edition = "2021"
 
