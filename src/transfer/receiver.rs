@@ -1,5 +1,6 @@
 use crate::error::{AppError, Result};
-use crate::transfer::protocol::{ChunkData, ParsedMessage, TransferMessage};
+use crate::transfer::crypto::{decrypt_chunk, KEY_SIZE};
+use crate::transfer::protocol::{ParsedMessage, TransferMessage};
 use bytes::Bytes;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::{Path, PathBuf};
@@ -14,6 +15,7 @@ pub struct FileReceiver {
     output_dir: PathBuf,
     data_channel: Arc<RTCDataChannel>,
     message_rx: mpsc::Receiver<Vec<u8>>,
+    key: [u8; KEY_SIZE],
 }
 
 impl FileReceiver {
@@ -21,11 +23,13 @@ impl FileReceiver {
         output_dir: impl AsRef<Path>,
         data_channel: Arc<RTCDataChannel>,
         message_rx: mpsc::Receiver<Vec<u8>>,
+        key: [u8; KEY_SIZE],
     ) -> Self {
         Self {
             output_dir: output_dir.as_ref().to_path_buf(),
             data_channel,
             message_rx,
+            key,
         }
     }
 
@@ -73,10 +77,9 @@ impl FileReceiver {
                 .progress_chars("#>-"),
         );
 
-        // Receive chunks
+        // Receive encrypted chunks
         let mut bytes_received = 0u64;
         let mut expected_chunk = 0u64;
-        let mut pending_chunk_header: Option<u64> = None;
 
         loop {
             let data = self
@@ -86,38 +89,33 @@ impl FileReceiver {
                 .ok_or(AppError::ChannelClosed)?;
 
             match ParsedMessage::from_bytes(&data) {
-                Some(ParsedMessage::Control(TransferMessage::Chunk { index })) => {
-                    // Received chunk header, expect chunk data next
-                    pending_chunk_header = Some(index);
-                }
-                Some(ParsedMessage::Chunk(chunk_data)) => {
-                    // Received chunk data
-                    let expected_index = pending_chunk_header.unwrap_or(expected_chunk);
-
-                    if chunk_data.index != expected_index {
+                Some(ParsedMessage::EncryptedChunk(encrypted_chunk)) => {
+                    // Decrypt and verify chunk
+                    if encrypted_chunk.index != expected_chunk {
                         warn!(
                             "Received out-of-order chunk: expected {}, got {}",
-                            expected_index, chunk_data.index
+                            expected_chunk, encrypted_chunk.index
                         );
                     }
 
-                    // Write chunk to file
-                    file.write_all(&chunk_data.data).await?;
-                    bytes_received += chunk_data.data.len() as u64;
+                    let plaintext = decrypt_chunk(&self.key, &encrypted_chunk)?;
+
+                    // Write decrypted chunk to file
+                    file.write_all(&plaintext).await?;
+                    bytes_received += plaintext.len() as u64;
                     progress.set_position(bytes_received);
 
                     debug!(
-                        "Received chunk {} ({} bytes)",
-                        chunk_data.index,
-                        chunk_data.data.len()
+                        "Received and decrypted chunk {} ({} bytes)",
+                        encrypted_chunk.index,
+                        plaintext.len()
                     );
 
                     // Send acknowledgment
-                    let ack_msg = TransferMessage::ack(chunk_data.index);
+                    let ack_msg = TransferMessage::ack(encrypted_chunk.index);
                     self.send_message(&ack_msg).await?;
 
-                    expected_chunk = chunk_data.index + 1;
-                    pending_chunk_header = None;
+                    expected_chunk = encrypted_chunk.index + 1;
                 }
                 Some(ParsedMessage::Control(TransferMessage::Done)) => {
                     info!("Transfer complete signal received");
@@ -127,20 +125,7 @@ impl FileReceiver {
                     return Err(AppError::Transfer(format!("Sender error: {}", message)));
                 }
                 _ => {
-                    // Unknown message, try parsing as raw chunk data
-                    if let Some(chunk_data) = ChunkData::from_bytes(&data) {
-                        let expected_index = pending_chunk_header.unwrap_or(expected_chunk);
-
-                        file.write_all(&chunk_data.data).await?;
-                        bytes_received += chunk_data.data.len() as u64;
-                        progress.set_position(bytes_received);
-
-                        let ack_msg = TransferMessage::ack(chunk_data.index);
-                        self.send_message(&ack_msg).await?;
-
-                        expected_chunk = expected_index + 1;
-                        pending_chunk_header = None;
-                    }
+                    debug!("Ignoring unknown message type");
                 }
             }
         }

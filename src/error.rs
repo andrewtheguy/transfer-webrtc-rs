@@ -40,6 +40,9 @@ pub enum AppError {
 
     #[error("Channel closed")]
     ChannelClosed,
+
+    #[error("Encryption error: {0}")]
+    Encryption(String),
 }
 
 pub type Result<T> = std::result::Result<T, AppError>;

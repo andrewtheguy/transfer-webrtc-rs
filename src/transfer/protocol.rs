@@ -130,6 +130,7 @@ impl ChunkData {
 pub enum ParsedMessage {
     Control(TransferMessage),
     Chunk(ChunkData),
+    EncryptedChunk(crate::transfer::crypto::EncryptedChunk),
 }
 
 impl ParsedMessage {
@@ -141,6 +142,8 @@ impl ParsedMessage {
         match data[0] {
             0 => TransferMessage::from_bytes(data).map(ParsedMessage::Control),
             1 => ChunkData::from_bytes(data).map(ParsedMessage::Chunk),
+            2 => crate::transfer::crypto::EncryptedChunk::from_bytes(data)
+                .map(ParsedMessage::EncryptedChunk),
             _ => None,
         }
     }

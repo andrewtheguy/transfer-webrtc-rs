@@ -33,7 +33,9 @@ async fn main() -> anyhow::Result<()> {
 
     let result = match cli.command {
         Commands::Send { file, peer_id } => run_sender(file, peer_id, &cli.server).await,
-        Commands::Receive { peer_id, output } => run_receiver(peer_id, output, &cli.server).await,
+        Commands::Receive { peer_id, key, output } => {
+            run_receiver(peer_id, key, output, &cli.server).await
+        }
     };
 
     if let Err(e) = result {
@@ -59,8 +61,16 @@ async fn run_sender(file: PathBuf, peer_id: Option<String>, server: &str) -> Res
     let mut signaling = PeerJsClient::connect(&peer_id, Some(server)).await?;
     signaling.wait_for_open().await?;
 
+    // Generate encryption key early so we can display it
+    let key_preview = {
+        use crate::transfer::crypto::{generate_key, key_to_base64};
+        let key = generate_key();
+        (key, key_to_base64(&key))
+    };
+
     println!("\nYour peer ID: {}", peer_id);
-    println!("Share this ID with the receiver. Waiting for connection...\n");
+    println!("Encryption key: {}", key_preview.1);
+    println!("\nShare BOTH with the receiver. Waiting for connection...\n");
 
     // Create WebRTC peer
     let mut webrtc_peer = WebRtcPeer::new().await?;
@@ -168,8 +178,8 @@ async fn run_sender(file: PathBuf, peer_id: Option<String>, server: &str) -> Res
     // Wait a bit for the connection to stabilize
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    // Send the file
-    let mut sender = FileSender::new(file, data_channel, message_rx);
+    // Send the file (using the pre-generated key)
+    let mut sender = FileSender::new(file, data_channel, message_rx, key_preview.0);
     sender.send().await?;
 
     // Clean up
@@ -178,7 +188,15 @@ async fn run_sender(file: PathBuf, peer_id: Option<String>, server: &str) -> Res
     Ok(())
 }
 
-async fn run_receiver(peer_id: String, output: Option<PathBuf>, server: &str) -> Result<()> {
+async fn run_receiver(
+    peer_id: String,
+    key_base64: String,
+    output: Option<PathBuf>,
+    server: &str,
+) -> Result<()> {
+    // Parse the encryption key
+    let key = crate::transfer::key_from_base64(&key_base64)?;
+
     let output_dir = output.unwrap_or_else(|| PathBuf::from("."));
     let our_peer_id = generate_peer_id();
     let connection_id = Uuid::new_v4().to_string();
@@ -290,7 +308,7 @@ async fn run_receiver(peer_id: String, output: Option<PathBuf>, server: &str) ->
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Receive the file
-    let mut receiver = FileReceiver::new(output_dir, data_channel, message_rx);
+    let mut receiver = FileReceiver::new(output_dir, data_channel, message_rx, key);
     let output_path = receiver.receive().await?;
 
     println!("\nFile saved to: {}", output_path.display());

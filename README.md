@@ -5,6 +5,7 @@ A peer-to-peer file transfer CLI tool using WebRTC data channels. Transfer files
 ## Features
 
 - **Peer-to-peer**: Files transfer directly between sender and receiver
+- **End-to-end encrypted**: AES-256-GCM encryption with offline key sharing
 - **No server hosting required**: Uses public PeerJS signaling servers
 - **Human-friendly peer IDs**: Easy-to-share IDs like `brave-mountain-river`
 - **Progress display**: Real-time transfer progress with speed indication
@@ -28,19 +29,21 @@ cargo build --release
 ### Sending a file
 
 ```bash
-# Start sender and get a peer ID
+# Start sender and get a peer ID + encryption key
 transfer-webrtc-rs send myfile.zip
 
 # Output:
 # Your peer ID: brave-mountain-river
-# Share this ID with the receiver. Waiting for connection...
+# Encryption key: Abc123...XYZ=
+#
+# Share BOTH with the receiver. Waiting for connection...
 ```
 
 ### Receiving a file
 
 ```bash
-# Connect using the peer ID from the sender
-transfer-webrtc-rs receive brave-mountain-river
+# Connect using the peer ID and encryption key from the sender
+transfer-webrtc-rs receive brave-mountain-river --key "Abc123...XYZ="
 
 # Output:
 # Connecting to peer brave-mountain-river...
@@ -54,10 +57,10 @@ transfer-webrtc-rs receive brave-mountain-river
 
 ```
 transfer-webrtc-rs send <FILE> [OPTIONS]
-transfer-webrtc-rs receive <PEER_ID> [OPTIONS]
+transfer-webrtc-rs receive <PEER_ID> --key <KEY> [OPTIONS]
 
 Options:
-  -s, --server <SERVER>  PeerJS server URL [default: wss://0.peerjs.com/peerjs]
+  -s, --server <SERVER>  PeerJS server URL [default: 0.peerjs.com]
   -v, --verbose          Enable verbose logging
   -h, --help             Print help
 
@@ -65,16 +68,18 @@ Send options:
   -p, --peer-id <ID>     Use a custom peer ID instead of generating one
 
 Receive options:
+  -k, --key <KEY>        Encryption key (base64, required)
   -o, --output <DIR>     Output directory for received files [default: current directory]
 ```
 
 ## How it works
 
 1. **Signaling**: Both peers connect to a PeerJS signaling server via WebSocket
-2. **Connection**: The receiver initiates a WebRTC connection by sending an offer
-3. **ICE Exchange**: Both peers exchange ICE candidates for NAT traversal
-4. **Data Channel**: Once connected, a WebRTC data channel is established
-5. **Transfer**: The file is sent in 16KB chunks with acknowledgments
+2. **Key Exchange**: Sender generates a random AES-256 key, shares it offline with receiver
+3. **Connection**: The receiver initiates a WebRTC connection by sending an offer
+4. **ICE Exchange**: Both peers exchange ICE candidates for NAT traversal
+5. **Data Channel**: Once connected, a WebRTC data channel is established
+6. **Transfer**: File chunks are encrypted with AES-256-GCM before sending (16KB chunks)
 
 ```
 ┌─────────────┐     WebSocket      ┌─────────────────┐
@@ -96,9 +101,17 @@ Receive options:
 - Internet connection (for signaling and STUN)
 - Both peers must be able to establish a P2P connection (works through most NATs)
 
+## Security
+
+- **AES-256-GCM**: Industry-standard authenticated encryption
+- **Offline key sharing**: Encryption key is never transmitted over the network
+- **Per-chunk integrity**: Each chunk is authenticated, tampering is detected immediately
+- **Unique nonces**: Counter-based nonces prevent replay attacks
+
 ## Dependencies
 
 - [webrtc-rs](https://github.com/webrtc-rs/webrtc) - WebRTC implementation
+- [aes-gcm](https://github.com/RustCrypto/AEADs) - AES-256-GCM encryption
 - [tokio](https://tokio.rs/) - Async runtime
 - [tokio-tungstenite](https://github.com/snapview/tokio-tungstenite) - WebSocket client
 - [clap](https://clap.rs/) - CLI argument parsing

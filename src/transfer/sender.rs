@@ -1,5 +1,6 @@
 use crate::error::{AppError, Result};
-use crate::transfer::protocol::{ChunkData, ParsedMessage, TransferMessage, CHUNK_SIZE};
+use crate::transfer::crypto::{encrypt_chunk, generate_salt, KEY_SIZE, SALT_SIZE};
+use crate::transfer::protocol::{ParsedMessage, TransferMessage, CHUNK_SIZE};
 use bytes::Bytes;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
@@ -14,6 +15,8 @@ pub struct FileSender {
     file_path: std::path::PathBuf,
     data_channel: Arc<RTCDataChannel>,
     message_rx: mpsc::Receiver<Vec<u8>>,
+    key: [u8; KEY_SIZE],
+    salt: [u8; SALT_SIZE],
 }
 
 impl FileSender {
@@ -21,11 +24,15 @@ impl FileSender {
         file_path: impl AsRef<Path>,
         data_channel: Arc<RTCDataChannel>,
         message_rx: mpsc::Receiver<Vec<u8>>,
+        key: [u8; KEY_SIZE],
     ) -> Self {
+        let salt = generate_salt();
         Self {
             file_path: file_path.as_ref().to_path_buf(),
             data_channel,
             message_rx,
+            key,
+            salt,
         }
     }
 
@@ -81,7 +88,7 @@ impl FileSender {
                 .progress_chars("#>-"),
         );
 
-        // Send file chunks
+        // Send file chunks (encrypted)
         let mut buffer = vec![0u8; CHUNK_SIZE];
         let mut chunk_index = 0u64;
         let mut bytes_sent = 0u64;
@@ -92,19 +99,16 @@ impl FileSender {
                 break;
             }
 
-            // Send chunk header
-            let chunk_msg = TransferMessage::chunk(chunk_index);
-            self.send_message(&chunk_msg).await?;
-
-            // Send chunk data
-            let chunk_data = ChunkData::new(chunk_index, buffer[..bytes_read].to_vec());
-            self.send_bytes(&chunk_data.to_bytes()).await?;
+            // Encrypt and send chunk
+            let encrypted_chunk =
+                encrypt_chunk(&self.key, chunk_index, &self.salt, &buffer[..bytes_read])?;
+            self.send_bytes(&encrypted_chunk.to_bytes()).await?;
 
             bytes_sent += bytes_read as u64;
             progress.set_position(bytes_sent);
 
             debug!(
-                "Sent chunk {} ({} bytes)",
+                "Sent encrypted chunk {} ({} bytes plaintext)",
                 chunk_index, bytes_read
             );
 

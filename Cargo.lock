@@ -2198,6 +2198,7 @@ dependencies = [
 name = "transfer-webrtc-rs"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "base64 0.22.1",
  "bytes",

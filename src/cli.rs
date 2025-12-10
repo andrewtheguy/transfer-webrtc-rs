@@ -34,6 +34,10 @@ pub enum Commands {
         /// Peer ID of the sender
         peer_id: String,
 
+        /// Encryption key (base64-encoded, provided by sender)
+        #[arg(short, long)]
+        key: String,
+
         /// Output directory (default: current directory)
         #[arg(short, long)]
         output: Option<PathBuf>,
