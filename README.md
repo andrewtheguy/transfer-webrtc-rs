@@ -103,11 +103,10 @@ Receive options:
 
 ## Security
 
-- **AES-256-GCM**: Industry-standard authenticated encryption
-- **Offline key sharing**: Encryption key is never transmitted over the network
-- **Encrypted metadata**: Filenames and sizes are AES-GCM encrypted before sending
-- **Per-chunk integrity**: Each chunk is authenticated, tampering is detected immediately
-- **Unique nonces**: Counter-based nonces prevent replay attacks
+- **Scope**: The shared AES-256-GCM key encrypts everything sent over the data channel: filenames, sizes, and every file chunk. Signaling via PeerJS (peer IDs, ICE) is not end-to-end encrypted but carries no file contents.
+- **Key sharing**: Sender generates a 32-byte key and shows it as base64; you must share it out-of-band. It is never transmitted by the app.
+- **Integrity + nonces**: Every encrypted payload is authenticated. Chunks use nonces derived from the chunk index plus a random salt to avoid reuse; metadata uses a random nonce.
+- **What is not protected**: Signaling traffic and traffic analysis (timing/total bytes) are not hidden. There is no forward secrecy—use a fresh key per transfer.
 
 ## Protocol payloads
 
