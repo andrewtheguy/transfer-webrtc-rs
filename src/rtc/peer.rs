@@ -36,11 +36,6 @@ const TURN_SERVERS: &[TurnServer] = &[
         username: "peerjs",
         credential: "peerjsp",
     },
-    TurnServer {
-        url: "turn:openrelay.metered.ca:80",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-    },
 ];
 
 pub struct WebRtcPeer {
