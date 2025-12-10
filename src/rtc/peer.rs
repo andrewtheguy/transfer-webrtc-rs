@@ -8,6 +8,7 @@ use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::ice_transport::ice_candidate::{RTCIceCandidate, RTCIceCandidateInit};
+use webrtc::ice_transport::ice_credential_type::RTCIceCredentialType;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
 use webrtc::peer_connection::configuration::RTCConfiguration;
@@ -45,7 +46,7 @@ impl WebRtcPeer {
                     urls: TURN_SERVERS.iter().map(|s| s.to_string()).collect(),
                     username: TURN_USERNAME.to_owned(),
                     credential: TURN_CREDENTIAL.to_owned(),
-                    ..Default::default()
+                    credential_type: RTCIceCredentialType::Password,
                 },
             ],
             ..Default::default()
